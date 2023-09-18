@@ -106,13 +106,6 @@ except:
     "RELEASE_TYPE": "release",
     
     //=====================================================================//
-    //  DEPENDENCIES
-    //=====================================================================//
-    
-    // File name of the latest https://github.com/ModdingX/ModListCreator/releases
-    "CHANGELOG_MODLIST_GENERATOR_JAR": "ModListCreator-4.0.3-fatjar.jar",
-    
-    //=====================================================================//
     //  CLIENT FILE SETTINGS
     //=====================================================================//
     // Note: "mods" is included automatically and will break the script if you include it yourself.
@@ -130,6 +123,13 @@ except:
     //=====================================================================//
     
     "SERVER_FILES_FOLDER": "server_files",
+
+    // This is in addition to the files already in $
+    "FOLDERS_TO_INCLUDE_IN_SERVER_FILES": [
+        "config",
+        "defaultconfigs",
+        "kubejs"
+    ],
 
     // =====================================================================//
     //  MODULES
@@ -153,6 +153,7 @@ except:
     // LAST_MODPACK_VERSION must be set, and the manifest naming must be consistent.
     // Default: false
     "ENABLE_CHANGELOG_GENERATOR_MODULE": false,
+    
     // Path to the ChangelogGenerator's output file
     "CHANGELOG_PATH": "INSTANCE_ROOT/changelogs/changelog_mods_MODPACK_VERSION.md",
     
@@ -238,13 +239,6 @@ except:
     "RELEASE_TYPE": "release",
     
     //=====================================================================//
-    //  DEPENDENCIES
-    //=====================================================================//
-    
-    // File name of the latest https://github.com/ModdingX/ModListCreator/releases
-    "CHANGELOG_MODLIST_GENERATOR_JAR": "ModListCreator-4.0.3-fatjar.jar",
-    
-    //=====================================================================//
     //  CLIENT FILE SETTINGS
     //=====================================================================//
     // Note: "mods" is included automatically and will break the script if you include it yourself.
@@ -262,6 +256,13 @@ except:
     //=====================================================================//
     
     "SERVER_FILES_FOLDER": "server_files",
+
+    // This is in addition to the files already in $
+    "FOLDERS_TO_INCLUDE_IN_SERVER_FILES": [
+        "config",
+        "defaultconfigs",
+        "kubejs"
+    ],
    
     // =====================================================================//
     //  MODULES
@@ -366,7 +367,7 @@ SERVER_FILES_FOLDER = json_data.get("SERVER_FILES_FOLDER")
 
 if json_data.get("ENABLE_SERVER_FILE_MODULE") == True:
     try:
-        os.mkdir("server_files")
+        os.mkdir(json_data.get("SERVER_FILES_FOLDER"))
     except:
         pass
     try:
@@ -821,11 +822,15 @@ def remove_blacklisted_files():
 
 # Function to create a changelog
 def new_changelog():
-    if json_data.get(LAST_ENABLE_CHANGELOG_GENERATOR_MODULE) == True and json_data.get(LAST_MODPACK_VERSION) and os.path.exists(f"{instance_root}/{LAST_CLIENT_ZIP_NAME}.zip") and os.path.exists(f"{instance_root}/{CLIENT_ZIP_NAME}.zip"):
-        if not os.path.exists(json_data.get(CHANGELOG_MODLIST_GENERATOR_JAR)) or json_data.get(ENABLE_ALWAYS_UPDATE_JARS):
-            if os.path.exists(json_data.get(CHANGELOG_MODLIST_GENERATOR_JAR)):
-                os.remove(json_data.get(CHANGELOG_MODLIST_GENERATOR_JAR))
-            get_github_release("ModdingX/ModListCreator", json_data.get(CHANGELOG_MODLIST_GENERATOR_JAR))
+    if json_data.get("ENABLE_CHANGELOG_GENERATOR_MODULE") == True and json_data.get("LAST_MODPACK_VERSION") and os.path.exists(f"{instance_root}/{LAST_CLIENT_ZIP_NAME}.zip") and os.path.exists(f"{instance_root}/{CLIENT_ZIP_NAME}.zip"):
+        if not os.path.exists(json_data.get("CHANGELOG_MODLIST_GENERATOR_JAR")) or json_data.get("ENABLE_ALWAYS_UPDATE_JARS"):
+            if os.path.exists(json_data.get("CHANGELOG_MODLIST_GENERATOR_JAR")):
+                os.remove(json_data.get("CHANGELOG_MODLIST_GENERATOR_JAR"))
+                r = requests.get("https://cdn.naylahanegan.com/ModListCreator-4.1.0-fatjar.jar")
+                file_path = os.path.join(".ModpackSuite", "sModListCreator-4.1.0-fatjar.jar")
+                with open(file_path, "wb") as file:
+                    file.write(r.content)
+
         
         print("Generating mod changelog...")
         
@@ -907,13 +912,27 @@ def new_server_files(client_file_return_id):
     if os.path.exists(server_zip):
         os.remove(server_zip)
     try:
-        os.mkdir("automation")
+        os.mkdir("tmp")
     except:
         pass
-    print("Creating server files...")
-    subprocess.run(["7z", "a", "-tzip", server_zip, f"{SERVER_FILES_FOLDER}/*"], check=True)
-    shutil.move(("automation/" + server_zip), server_zip)
-    print("Server files created!")
+    
+    for folder in json_data.get("FOLDERS_TO_INCLUDE_IN_SERVER_FILES"):
+        print(f"Adding {folder} to client files.")
+        destination_folder = os.path.join(SERVER_FILES_FOLDER, folder)
+        
+        if not os.path.exists(destination_folder):
+            shutil.copytree(folder, destination_folder)
+        
+        destination_folder = os.path.join(SERVER_FILES_FOLDER, "mods")
+        if not os.path.exists(destination_folder):
+            os.makedirs(destination_folder)
+        
+        for file in json_data.get("FILES_TO_INCLUDE_IN_MODS_FOLDER_IN_CLIENT_FILES", []):
+            print(f"Adding {file} to the mods folder in the client files.")
+            shutil.copy(file, os.path.join("mods/" + destination_folder, os.path.basename(file)))
+
+        subprocess.run(["7z", "a", "-tzip", server_zip, SERVER_FILES_FOLDER + "/*",  "-r", "-sdel"])
+        print("Server files created!")
     
     if json_data.get("ENABLE_MODPACK_UPLOADER_MODULE") == True:
         push_server_files(client_file_return_id)
@@ -928,18 +947,21 @@ def push_server_files(client_file_return_id):
             "changelogType": "markdown",
             "displayName": SERVER_FILE_DISPLAY_NAME,
             "parentFileId": client_file_return_id,
-            "releaseType": RELEASE_TYPE
+            "releaseType": json_data.get("RELEASE_TYPE")
         }
         
         print("Uploading server files...")
         
         headers = {
-            "Authorization": f"Basic {CURSEFORGE_AUTHOR}:{CURSEFORGE_UPLOAD_TOKEN}"
+            "X-Api-Token": CURSEFORGE_UPLOAD_TOKEN,
+            "Accept": "application/json",
+            "Authorization": f"Basic {base64.b64encode(f'{CURSEFORGE_AUTHOR}:{CURSEFORGE_UPLOAD_TOKEN}'.encode()).decode()}"
+
         }
-        
+
         files = {
             "metadata": (None, json.dumps(SERVER_METADATA)),
-            "file": (os.path.basename(server_file_path), open(server_file_path, "rb"))
+            "file": server_file_path
         }
         
         response = requests.post(f"https://minecraft.curseforge.com/api/projects/{CF_ID}/upload-file", headers=headers, files=files)
@@ -951,9 +973,9 @@ def push_server_files(client_file_return_id):
         if "id" in response_json:
             print("Uploaded server files!")
 
-# Function to create a new GitHub release
+# Function to create a new GitHub releaseg
 def new_github_release():
-    if ENABLE_GITHUB_RELEASE_MODULE:
+    if json_data.get("ENABLE_GITHUB_RELEASE_MODULE") == True:
         print("Making GitHub Release...")
         
         base64_token = base64.b64encode(GITHUB_TOKEN.encode()).decode()
@@ -977,22 +999,29 @@ def new_github_release():
 
 # Function to update the modlist
 def update_modlist():
-    if ENABLE_MODLIST_CREATOR_MODULE:
-        if not os.path.exists(MODLIST_CREATOR_JAR) or ENABLE_ALWAYS_UPDATE_JARS:
+    MODLIST_CREATOR_JAR = os.path.join(".ModpackSuite", "ModListCreator-4.1.0-fatjar.jar")
+    if json_data.get("ENABLE_MODLIST_CREATOR_MODULE") == True:
+        try:
+            os.mkdir(".ModpackSuite")
+        except:
+            pass
+        if not os.path.exists(MODLIST_CREATOR_JAR) or json_data.get("ENABLE_ALWAYS_UPDATE_JARS") == True:
             if os.path.exists(MODLIST_CREATOR_JAR):
                 os.remove(MODLIST_CREATOR_JAR)
-            get_github_release("ModdingX/ModListCreator", MODLIST_CREATOR_JAR)
+            r = requests.get("https://cdn.naylahanegan.com/ModListCreator-4.1.0-fatjar.jar")
+            with open(MODLIST_CREATOR_JAR, "wb") as file:
+                file.write(r.content)
         
         print("Generating Modlist...")
         
         try:
-            os.remove(MODLIST_PATH)
+            os.remove(json_data.get("MODLIST_PATH"))
         except FileNotFoundError:
             pass
         
-        subprocess.run(["java", "-jar", MODLIST_CREATOR_JAR, "modlist", "--output", MODLIST_PATH, "--detailed", f"{CLIENT_ZIP_NAME}.zip"], check=True)
+        subprocess.run(["java", "-jar", MODLIST_CREATOR_JAR, "modlist", "--output", json_data.get("MODLIST_PATH"), "--detailed", f"{CLIENT_ZIP_NAME}.zip"], check=True)
         
-        shutil.copy(MODLIST_PATH, os.path.join(instance_root, "MODLIST.md"))
+        shutil.copy(json_data.get("MODLIST_PATH"), os.path.join(instance_root, "MODLIST.md"))
 
 if __name__ == "__main__":
     start_location = os.getcwd()
@@ -1002,9 +1031,6 @@ if __name__ == "__main__":
         test_for_dependencies()
         new_client_files()
         push_client_files()
-        
-        if json_data.get("ENABLE_SERVER_FILE_MODULE") == True and json_data.get("ENABLE_MODPACK_UPLOADER_MODULE") == True:
-            new_server_files()
         
         new_github_release()
         new_changelog()
