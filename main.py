@@ -4,6 +4,7 @@ import json5
 import json
 import requests
 import shutil
+import re
 import base64
 
 from tqdm import tqdm
@@ -361,6 +362,7 @@ SERVER_ZIP_NAME = json_data.get("CLIENT_NAME") + "-" + "Server" + "-" + json_dat
 CF_ID = json_data.get("CURSEFORGE_PROJECT_ID")
 CURSEFORGE_AUTHOR = json_data.get("CURSEFORGE_AUTHOR")
 CURSEFORGE_UPLOAD_TOKEN = json_data1.get("CURSEFORGE_UPLOAD_TOKEN")
+SERVER_FILES_FOLDER = json_data.get("SERVER_FILES_FOLDER")
 
 if json_data.get("ENABLE_SERVER_FILE_MODULE") == True:
     try:
@@ -671,9 +673,9 @@ launch:
     - "-XX:MaxTenuringThreshold=1"
     - "-Dfml.readTimeout=90"                        # servertimeout
     - "-Dfml.queryResult=confirm"                   # auto /fmlconfirm"""
-# Write the contents to the file
-with open(json_data.get("SERVER_FILES_FOLDER") + "/server-setup-config.yaml", "w") as file:
-    file.write(serverF)
+    # Write the contents to the file
+    with open(json_data.get("SERVER_FILES_FOLDER") + "/server-setup-config.yaml", "w") as file:
+        file.write(serverF)
 
 try:
     with open(secrets_file, "r") as json_file2:
@@ -904,10 +906,13 @@ def new_server_files(client_file_return_id):
     server_zip = f"{SERVER_ZIP_NAME}.zip"
     if os.path.exists(server_zip):
         os.remove(server_zip)
-    
+    try:
+        os.mkdir("automation")
+    except:
+        pass
     print("Creating server files...")
     subprocess.run(["7z", "a", "-tzip", server_zip, f"{SERVER_FILES_FOLDER}/*"], check=True)
-    shutil.move(os.path.join("automation", server_zip), server_zip)
+    shutil.move(("automation/" + server_zip), server_zip)
     print("Server files created!")
     
     if json_data.get("ENABLE_MODPACK_UPLOADER_MODULE") == True:
